@@ -7,7 +7,7 @@ Fetches the top saint of the day from the OCA (Orthodox Church in America) websi
 For each day, the bot:
 
 1. Pulls the saint listing from the OCA website for that date
-2. Takes the first (top) saint listed
+2. Takes the first (top) saint listed, or a random lesser-commemorated saint with `--random`
 3. Fetches the saint's large icon image URL
 4. Fetches the troparion and kontakion from the troparia page
 5. Outputs a markdown file with a linked title, icon image, troparion, kontakion, and a standard hashtag footer
@@ -15,10 +15,14 @@ For each day, the bot:
 ## Usage
 
 ```bash
-python3 bot.py              # today's date
-python3 bot.py 2026-01-18   # a specific date (YYYY-MM-DD)
-python3 bot.py -o 18.md     # save to file instead of stdout
+python3 bot.py                     # top saint, today's date
+python3 bot.py 2026-01-18          # top saint, specific date (YYYY-MM-DD)
+python3 bot.py --random            # random non-top saint for today
+python3 bot.py --random 2026-01-18 # random non-top saint, specific date
+python3 bot.py -o 18.md            # save to file instead of stdout
 ```
+
+`--random` picks randomly from all saints commemorated that day except the top saint. If only one saint is listed for the day, that saint is used regardless.
 
 Output goes to stdout by default. Redirect to save:
 
@@ -71,7 +75,7 @@ thus, as He is good, excises the sins of mortal men.
 The bot scrapes two pages on oca.org for each date:
 
 ### Saints listing page
-`/saints/lives/YYYY/MM/DD` — the bot picks the first `<article class="saint">` on the page and extracts:
+`/saints/lives/YYYY/MM/DD` — the bot collects all `<article class="saint">` elements on the page. In default mode the first is used; in `--random` mode one is chosen at random from the rest. From each article it extracts:
 - The saint's name from `<h2 class="name">`
 - The slug URL for the life and troparia pages
 - The icon image URL (upgraded from thumbnail to large size)

@@ -5,6 +5,7 @@ and formats it for social media posting.
 """
 
 import argparse
+import random
 import re
 import sys
 from datetime import date, datetime
@@ -22,28 +23,15 @@ def fetch_page(url: str) -> BeautifulSoup:
     return BeautifulSoup(response.text, "html.parser")
 
 
-def get_top_saint(day: date) -> tuple[str, str, str]:
-    """Return (saint_name, life_slug_path, icon_url) for the first saint listed on the given day."""
-    url = f"{BASE_URL}/saints/lives/{day.year}/{day.month:02d}/{day.day:02d}"
-    soup = fetch_page(url)
-
-    # Each saint is wrapped in <article class="saint w-thumbnail clearfix">
-    article = soup.find("article", class_=re.compile(r"\bsaint\b"))
-    if not article:
-        print(f"ERROR: Could not find any saint on {url}", file=sys.stderr)
-        sys.exit(1)
-
-    # Saint name is in <h2 class="name">
+def parse_saint_article(article) -> tuple[str, str, str]:
+    """Extract (saint_name, slug_path, icon_url) from a saint <article> element."""
     name_tag = article.find("h2", class_="name")
     saint_name = re.sub(r"\s+", " ", name_tag.get_text(strip=True)) if name_tag else ""
-    # Strip inline HTML comments like <!-- 100553 -->
     saint_name = re.sub(r"<!--.*?-->", "", saint_name).strip()
 
-    # Life link href, e.g. /saints/lives/2026/02/18/100553-saint-leo-the-great-pope-of-rome
     life_link = article.find("a", href=re.compile(r"/saints/lives/\d{4}/\d{2}/\d{2}/\d+-.+"))
     slug_path = life_link["href"] if life_link else ""
 
-    # Icon: <img> inside <figure class="thumbnail"> — url is the xsm version, upgrade to lg
     img = article.find("figure", class_="thumbnail")
     img_tag = img.find("img") if img else None
     icon_url = ""
@@ -53,6 +41,19 @@ def get_top_saint(day: date) -> tuple[str, str, str]:
             icon_url = f"https:{icon_url}" if icon_url.startswith("//") else f"https://images.oca.org{icon_url}"
 
     return saint_name, slug_path, icon_url
+
+
+def get_all_saints(day: date) -> list[tuple[str, str, str]]:
+    """Return a list of (saint_name, slug_path, icon_url) for all saints on the given day."""
+    url = f"{BASE_URL}/saints/lives/{day.year}/{day.month:02d}/{day.day:02d}"
+    soup = fetch_page(url)
+
+    articles = soup.find_all("article", class_=re.compile(r"\bsaint\b"))
+    if not articles:
+        print(f"ERROR: Could not find any saint on {url}", file=sys.stderr)
+        sys.exit(1)
+
+    return [parse_saint_article(a) for a in articles]
 
 
 def clean_chant_text(text: str) -> str:
@@ -134,14 +135,28 @@ def main():
         "-o", "--output",
         help="Save output to this file instead of printing to stdout.",
     )
+    parser.add_argument(
+        "--random",
+        action="store_true",
+        help="Pick a random non-top saint for the day. Falls back to the top saint if only one is listed.",
+    )
     args = parser.parse_args()
 
     day = parse_date(args.date) if args.date else date.today()
 
     print(f"Fetching saint for {day.strftime('%B %d, %Y')}...", file=sys.stderr)
 
-    saint_name, slug_path, icon_url = get_top_saint(day)
-    print(f"Top saint: {saint_name}", file=sys.stderr)
+    saints = get_all_saints(day)
+
+    if args.random and len(saints) > 1:
+        saint_name, slug_path, icon_url = random.choice(saints[1:])
+        print(f"Random saint: {saint_name}", file=sys.stderr)
+    else:
+        saint_name, slug_path, icon_url = saints[0]
+        if args.random:
+            print(f"Only one saint today, using: {saint_name}", file=sys.stderr)
+        else:
+            print(f"Top saint: {saint_name}", file=sys.stderr)
 
     troparion, kontakion = get_troparia(slug_path)
 
